@@ -10,7 +10,7 @@ services:
       retries: 10
 
   loader:
-      build: ./loader    
+      build: ./loader  
       env_file: .env    
       volumes:      
         - ./data:/data    
