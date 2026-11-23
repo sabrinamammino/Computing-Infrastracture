@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
+import altair as alt
 
 st.set_page_config(page_title="AI model pricing", layout="wide")
 
@@ -143,6 +144,10 @@ FROM ai_models
 # ---------------------------------------------------------------------------
 # The page
 # ---------------------------------------------------------------------------
+st.markdown(
+    ":material/neurology: &nbsp; **AI MARKET INTELLIGENCE**"
+)
+
 st.title("How have AI model prices and abilities changed?")
 
 try:
@@ -159,12 +164,93 @@ st.caption(
     f"{int(overview.developers)} developers, {overview.first_week} to {overview.last_week} "
     f"({int(overview.rows_loaded):,} rows)."
 )
+# Dashboard overview: key metrics
+col1, col2, col3 = st.columns(3, gap="medium")
+
+with col1:
+    st.metric(
+        label="AI Model Listings",
+        value=f"{int(overview.listings):,}",
+        border=True
+    )
+
+with col2:
+    st.metric(
+        label="AI Developers",
+        value=f"{int(overview.developers):,}",
+        border=True
+    )
+
+with col3:
+    st.metric(
+        label="Total Observations",
+        value=f"{int(overview.rows_loaded):,}",
+        border=True
+    )
+
+st.divider()
 
 st.header("1. Are typical prices falling?")
 st.write("Median price in US dollars per 1 million tokens, chat models, per quarter.")
 q4 = run_query(Q4_MEDIAN_PRICE)
 q4["quarter"] = pd.to_datetime(q4["quarter"])
-st.line_chart(q4, x="quarter", y=["median_input_usd", "median_output_usd"])
+
+q4 = q4.rename(columns={
+    "median_input_usd": "Input price",
+    "median_output_usd": "Output price"
+})
+
+q4["quarter_label"] = (
+    q4["quarter"].dt.year.astype(str)
+    + " Q"
+    + q4["quarter"].dt.quarter.astype(str)
+)
+
+quarter_order = (
+    q4.sort_values("quarter")["quarter_label"].tolist()
+)
+
+chart_data = q4.melt(
+    id_vars=["quarter", "quarter_label"],
+    value_vars=["Input price", "Output price"],
+    var_name="Price type",
+    value_name="Price (USD)"
+)
+
+price_chart = (
+    alt.Chart(chart_data)
+    .mark_line(point=True, strokeWidth=3)
+    .encode(
+        x=alt.X(
+            "quarter_label:N",
+            sort=quarter_order,
+            title="Quarter",
+            axis=alt.Axis(labelAngle=-45)
+        ),
+        y=alt.Y(
+            "Price (USD):Q",
+            title="USD per 1 million tokens",
+            scale=alt.Scale(zero=True, nice=True, padding=20)
+        ),
+        color=alt.Color(
+            "Price type:N",
+            scale=alt.Scale(
+                domain=["Input price", "Output price"],
+                range=["#2563EB", "#F59E0B"]
+            ),
+            legend=alt.Legend(title=None, orient="bottom")
+        ),
+        tooltip=[
+            alt.Tooltip("quarter_label:N", title="Quarter"),
+            alt.Tooltip("Price type:N", title="Type"),
+            alt.Tooltip("Price (USD):Q", title="Price ($)", format=".3f")
+        ]
+    )
+    .properties(height=420)
+    .interactive()
+)
+
+st.altair_chart(price_chart, width="stretch")
 st.caption(
     "The median also moves because the mix of models changes (more cheap open "
     "models appear). Chart 2 compares each model with its own earlier price."
@@ -178,18 +264,146 @@ st.write(
 )
 q6 = run_query(Q6_CUTS_VS_RISES)
 q6["quarter"] = pd.to_datetime(q6["quarter"])
-st.line_chart(q6, x="quarter", y=["cuts_per_1000", "rises_per_1000"])
+
+q6["quarter_label"] = (
+    q6["quarter"].dt.year.astype(str)
+    + " Q"
+    + q6["quarter"].dt.quarter.astype(str)
+)
+
+quarter_order_q6 = (
+    q6.sort_values("quarter")["quarter_label"].tolist()
+)
+
+q6 = q6.rename(columns={
+    "cuts_per_1000": "Price cuts",
+    "rises_per_1000": "Price rises"
+})
+
+changes_data = q6.melt(
+    id_vars=["quarter", "quarter_label"],
+    value_vars=["Price cuts", "Price rises"],
+    var_name="Change type",
+    value_name="Changes per 1,000"
+)
+
+changes_chart = (
+    alt.Chart(changes_data)
+    .mark_line(point=True, strokeWidth=3)
+    .encode(
+        x=alt.X(
+            "quarter_label:N",
+            sort=quarter_order_q6,
+            title="Quarter",
+            axis=alt.Axis(labelAngle=-45)
+        ),
+        y=alt.Y(
+            "Changes per 1,000:Q",
+            title="Changes per 1,000 comparisons",
+            scale=alt.Scale(zero=True, nice=True, padding=20)
+        ),
+        color=alt.Color(
+            "Change type:N",
+            scale=alt.Scale(
+                domain=["Price cuts", "Price rises"],
+                range=["#2DD4BF", "#F59E0B"]
+            ),
+            legend=alt.Legend(title=None, orient="bottom")
+        ),
+        tooltip=[
+            alt.Tooltip("quarter_label:N", title="Quarter"),
+            alt.Tooltip("Change type:N", title="Type"),
+            alt.Tooltip(
+                "Changes per 1,000:Q",
+                title="Per 1,000 comparisons",
+                format=".2f"
+            )
+        ]
+    )
+    .properties(height=420)
+)
+
+st.altair_chart(changes_chart, width="stretch")
 show_sql(Q6_CUTS_VS_RISES)
 
 st.header("3. Which abilities are becoming standard?")
 st.write("Share of chat models that support each ability, per quarter.")
+# Get quarterly AI capabilities data
 q7 = run_query(Q7_CAPABILITIES)
 q7["quarter"] = pd.to_datetime(q7["quarter"])
-st.line_chart(
-    q7,
-    x="quarter",
-    y=["pct_reasoning", "pct_vision", "pct_function_calling", "pct_prompt_caching"],
+
+q7["quarter_label"] = (
+    q7["quarter"].dt.year.astype(str)
+    + " Q"
+    + q7["quarter"].dt.quarter.astype(str)
 )
+
+quarter_order_q7 = (
+    q7.sort_values("quarter")["quarter_label"].tolist()
+)
+
+q7 = q7.rename(columns={
+    "pct_reasoning": "Reasoning",
+    "pct_vision": "Vision",
+    "pct_function_calling": "Function calling",
+    "pct_prompt_caching": "Prompt caching"
+})
+
+capabilities_data = q7.melt(
+    id_vars=["quarter", "quarter_label"],
+    value_vars=[
+        "Reasoning",
+        "Vision",
+        "Function calling",
+        "Prompt caching"
+    ],
+    var_name="Capability",
+    value_name="Share (%)"
+)
+
+capabilities_chart = (
+    alt.Chart(capabilities_data)
+    .mark_line(point=True, strokeWidth=3)
+    .encode(
+        x=alt.X(
+            "quarter_label:N",
+            sort=quarter_order_q7,
+            title="Quarter",
+            axis=alt.Axis(labelAngle=-45)
+        ),
+        y=alt.Y(
+            "Share (%):Q",
+            title="Share of models (%)",
+            scale=alt.Scale(zero=True, nice=True, padding=20)
+        ),
+        color=alt.Color(
+            "Capability:N",
+            scale=alt.Scale(
+                domain=[
+                    "Reasoning",
+                    "Vision",
+                    "Function calling",
+                    "Prompt caching"
+                ],
+                range=[
+                    "#A78BFA",
+                    "#38BDF8",
+                    "#2DD4BF",
+                    "#F59E0B"
+                ]
+            ),
+            legend=alt.Legend(title=None, orient="bottom")
+        ),
+        tooltip=[
+            alt.Tooltip("quarter_label:N", title="Quarter"),
+            alt.Tooltip("Capability:N", title="Capability"),
+            alt.Tooltip("Share (%):Q", title="Share (%)", format=".1f")
+        ]
+    )
+    .properties(height=420)
+)
+
+st.altair_chart(capabilities_chart, width="stretch")
 st.caption(
     "Caution: the ability flags only exist for models still listed in 2026, "
     "so older quarters describe survivors only."
@@ -201,7 +415,37 @@ st.write(
     "Chat models that can read images and call functions, in the latest "
     "week, cheapest first. Blended price assumes 3 input tokens per output token."
 )
-st.dataframe(run_query(Q2_CHEAPEST_CAPABLE), hide_index=True, width="stretch")
+cheapest_models = run_query(Q2_CHEAPEST_CAPABLE)
+
+st.dataframe(
+    cheapest_models,
+    hide_index=True,
+    width="stretch",
+    column_config={
+        "model_name": st.column_config.TextColumn(
+            "AI Model",
+            width="medium"
+        ),
+        "provider": st.column_config.TextColumn("Provider"),
+        "developer": st.column_config.TextColumn("Developer"),
+        "input_usd": st.column_config.NumberColumn(
+            "Input ($/1M tokens)",
+            format="$%.3f"
+        ),
+        "output_usd": st.column_config.NumberColumn(
+            "Output ($/1M tokens)",
+            format="$%.3f"
+        ),
+        "blended_usd": st.column_config.NumberColumn(
+            "Blended ($/1M tokens)",
+            format="$%.3f"
+        ),
+        "max_input_tokens": st.column_config.NumberColumn(
+            "Context window",
+            format="%d"
+        )
+    }
+)
 show_sql(Q2_CHEAPEST_CAPABLE)
 
 st.header("5. The provider changes the price")
@@ -209,5 +453,33 @@ st.write(
     "The same model sold by 5 or more providers: how many times more "
     "expensive is the priciest provider than the cheapest?"
 )
-st.dataframe(run_query(Q3_PROVIDER_SPREAD), hide_index=True, width="stretch")
+provider_spread = run_query(Q3_PROVIDER_SPREAD)
+
+st.dataframe(
+    provider_spread,
+    hide_index=True,
+    width="stretch",
+    column_config={
+        "model_name": st.column_config.TextColumn(
+            "AI Model",
+            width="medium"
+        ),
+        "providers": st.column_config.NumberColumn(
+            "Providers",
+            format="%d"
+        ),
+        "cheapest_input_usd": st.column_config.NumberColumn(
+            "Lowest price ($/1M)",
+            format="$%.3f"
+        ),
+        "priciest_input_usd": st.column_config.NumberColumn(
+            "Highest price ($/1M)",
+            format="$%.3f"
+        ),
+        "times_more_expensive": st.column_config.NumberColumn(
+            "Price multiplier (×)",
+            format="%.1f×"
+        )
+    }
+)
 show_sql(Q3_PROVIDER_SPREAD)
