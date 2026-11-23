@@ -9,8 +9,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 PROJECT_DIR   = Path(__file__).resolve().parent  # Folder of this script, so it works from any working directory.
-RAW_DIR       = PROJECT_DIR / "data" / "raw"
-PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
+# Inside Docker the data folder is /data (DATA_DIR is set in loader/Dockerfile).
+# Run by hand, it is the data/ folder next to this script.
+DATA_ROOT     = Path(os.environ["DATA_DIR"]) if os.environ.get("DATA_DIR") else PROJECT_DIR.parent / "data"
+RAW_DIR       = DATA_ROOT / "raw"
+PROCESSED_DIR = DATA_ROOT / "processed"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -126,7 +129,7 @@ print("Checking data/raw/ ...")
 if raw_files_ok():
     print("Raw data already present and correct --> no download needed.")
 else:
-    load_credentials()
+    
     download_raw_data()
     print("Checking the downloaded files ...")
     if not raw_files_ok():
